@@ -11,10 +11,11 @@ permissions:
   pull-requests: write
   issues: write
 
-# Only one deploy to gh-pages at a time, never cancel a running one.
+# One run per branch/PR: a newer push supersedes an older run of the same ref. Different refs run in
+# parallel; the gh-pages publish step serializes itself with a pull --rebase retry loop.
 concurrency:
-  group: pages-deploy
-  cancel-in-progress: false
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   SITE_BASE: /${{ github.event.repository.name }}
