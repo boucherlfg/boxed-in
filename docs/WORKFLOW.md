@@ -15,9 +15,9 @@ After 3 rounds with BLOCKER/MAJOR left: `pr:escalated` (owner decides).
 
 ## Dispatcher priority (max 3 concurrent runs)
 1. PRs with `playtest-rejected` (dev, FIX_PLAYTEST)
-2. PRs with `smoke:failed` (dev, FIX_CI)
+2. PRs with `ci:failed` (dev, FIX_CI)
 3. PRs with `pr:changes-requested` (dev, FIX_REVIEW)
-4. PRs with `pr:needs-review` and no `smoke:failed` (reviewer)
+4. PRs with `pr:needs-review` and no `ci:failed` (reviewer)
 5. Issues with `status:ready`, by priority then points (dev, NEW)
 6. `status:proposed` issues where the owner commented after the last planner comment (planner, REVISE)
 7. Nothing ready and no `status:proposed` issue waiting for the owner: planner run (PLAN)

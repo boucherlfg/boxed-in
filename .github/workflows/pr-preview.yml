@@ -64,9 +64,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ steps.smoke.outcome }}" = "success" ]; then
-            gh pr edit ${{ github.event.number }} --remove-label "smoke:failed" || true
+            gh pr edit ${{ github.event.number }} --remove-label "ci:failed" || true
           else
-            gh pr edit ${{ github.event.number }} --add-label "smoke:failed"
+            gh pr edit ${{ github.event.number }} --add-label "ci:failed"
           fi
 
       - name: Stage site files
