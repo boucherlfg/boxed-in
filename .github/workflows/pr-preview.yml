@@ -32,6 +32,9 @@ jobs:
           cache: npm
           cache-dependency-path: tools/package-lock.json
 
+      - name: Unit tests (node:test, finds tests/*.test.js, passes when there are none)
+        run: node --test
+
       - name: Install smoke test tooling
         working-directory: tools
         run: |
