@@ -1,0 +1,12 @@
+{
+  "name": "swarm-tools",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only tooling for the swarm pipeline (smoke test). Not part of the game.",
+  "scripts": {
+    "smoke": "node smoke.mjs --dir .. --out ../artifacts"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

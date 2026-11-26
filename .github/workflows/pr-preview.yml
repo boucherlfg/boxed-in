@@ -1,0 +1,131 @@
+name: PR preview and smoke test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+# Only one deploy to gh-pages at a time, never cancel a running one.
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+env:
+  SITE_BASE: /${{ github.event.repository.name }}
+
+jobs:
+  preview:
+    if: github.event_name == 'push' || github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+
+      - name: Install smoke test tooling
+        working-directory: tools
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Smoke test (served under the same sub-path as the preview)
+        id: smoke
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="$SITE_BASE/pr-${{ github.event.number }}/"
+          else
+            BASE="$SITE_BASE/"
+          fi
+          node tools/smoke.mjs --dir . --base "$BASE" --out artifacts
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke
+          path: artifacts/
+
+      - name: Label PR with smoke result
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ steps.smoke.outcome }}" = "success" ]; then
+            gh pr edit ${{ github.event.number }} --remove-label "smoke:failed" || true
+          else
+            gh pr edit ${{ github.event.number }} --add-label "smoke:failed"
+          fi
+
+      - name: Stage site files
+        if: steps.smoke.outcome == 'success'
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude '.git' --exclude '.github' --exclude '_site' --exclude 'node_modules' \
+            --exclude 'tools' --exclude 'tests' --exclude 'docs' --exclude 'artifacts' \
+            --exclude 'DESIGN.md' --exclude 'README.md' \
+            ./ _site/
+
+      - name: Publish to gh-pages
+        if: steps.smoke.outcome == 'success'
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            DEST="pr-${{ github.event.number }}"
+          else
+            DEST="main"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git clone --depth 1 --branch gh-pages "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" _pages
+          rm -rf "_pages/$DEST"
+          mkdir -p "_pages/$DEST"
+          cp -a _site/. "_pages/$DEST/"
+          cd _pages
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Preview $DEST @ ${GITHUB_SHA::7}"
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+          done
+          exit 1
+
+      - name: Comment preview link
+        if: steps.smoke.outcome == 'success' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          URL="https://${OWNER}.github.io/${{ github.event.repository.name }}/pr-${{ github.event.number }}/"
+          gh pr comment ${{ github.event.number }} --edit-last --create-if-none \
+            --body "**Playable preview** (smoke test passed, commit \`${GITHUB_SHA::7}\`): $URL"
+
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove preview folder from gh-pages
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git clone --depth 1 --branch gh-pages "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" _pages
+          cd _pages
+          rm -rf "pr-${{ github.event.number }}"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Remove preview pr-${{ github.event.number }}"
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+          done
+          exit 1
